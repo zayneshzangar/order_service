@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source ./env.sh
+source /home/zangar/Documents/order_service/scripts/env.sh
 
 psql -U $ROOT_USER_PSQL -p $DB_PORT -h $DB_HOST \
     -c "CREATE ROLE $USER_ORDER_SERVICE WITH PASSWORD '$PASSWORD_ORDER_SERVICE';"
@@ -33,6 +33,7 @@ PGPASSWORD=$PASSWORD_ORDER_SERVICE psql -U $USER_ORDER_SERVICE -p $DB_PORT -h $D
     id SERIAL PRIMARY KEY,
     order_id INT REFERENCES orders(id) ON DELETE CASCADE,
     product_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
     quantity INT NOT NULL,
     price DECIMAL(10,2) NOT NULL
 );'

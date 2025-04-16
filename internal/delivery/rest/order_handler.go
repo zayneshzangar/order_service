@@ -2,9 +2,11 @@ package rest
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"order_service/internal/entity"
-	"order_service/internal/usecase"
+	"order_service/internal/middleware"
+	"order_service/internal/service"
 	"strconv"
 
 	"github.com/gorilla/mux"
@@ -12,28 +14,35 @@ import (
 
 // OrderHandler отвечает за обработку REST-запросов
 type OrderHandler struct {
-	orderUseCase usecase.OrderUseCase
+	orderService service.OrderService
 }
 
 // NewOrderHandler создаёт новый обработчик
-func NewOrderHandler(orderUseCase usecase.OrderUseCase) *OrderHandler {
-	return &OrderHandler{orderUseCase: orderUseCase}
+func NewOrderHandler(orderService service.OrderService) *OrderHandler {
+	return &OrderHandler{orderService: orderService}
 }
 
 // CreateOrderHandler — обработчик для создания продукта
 func (h *OrderHandler) CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		UserID     int64              `json:"user_id"`
-		Items      []entity.OrderItem `json:"items"`
-		TotalPrice float64            `json:"total_price"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	order, err := h.orderUseCase.CreateOrder(req.UserID, req.Items, req.TotalPrice)
+	fmt.Println("CreateOrderHandler")
+	// Парсим тело запроса без user_id — он берётся из токена
+	req := struct {
+		Items      []entity.OrderItem `json:"items"`
+		TotalPrice float64            `json:"total_price"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	payment, err := h.orderService.CreateOrder(userID, req.Items, req.TotalPrice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -41,12 +50,11 @@ func (h *OrderHandler) CreateOrderHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(order)
+	json.NewEncoder(w).Encode(payment)
 }
 
 // GetOrderByIDHandler — обработчик для получения продукта по ID
 func (h *OrderHandler) GetOrderByIDHandler(w http.ResponseWriter, r *http.Request) {
-	// Получаем ID из URL
 	vars := mux.Vars(r)
 	idStr, ok := vars["id"]
 	if !ok {
@@ -54,21 +62,64 @@ func (h *OrderHandler) GetOrderByIDHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Конвертируем строку в int64
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid order ID", http.StatusBadRequest)
 		return
 	}
 
-	// Получаем продукт из usecase
-	order, err := h.orderUseCase.GetOrderByID(id)
+	order, err := h.orderService.GetOrderByID(id)
 	if err != nil {
 		http.Error(w, "order not found", http.StatusNotFound)
 		return
 	}
 
-	// Отправляем ответ в JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(order)
+}
+
+func (h *OrderHandler) GetMyOrdersHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	orders, err := h.orderService.GetOrdersByUserID(userID)
+	if err != nil {
+		http.Error(w, "Ошибка при получении заказов", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(orders)
+}
+
+func (h *OrderHandler) CancelOrderHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	orderIDStr, ok := vars["id"]
+	if !ok {
+		http.Error(w, "missing order ID", http.StatusBadRequest)
+		return
+	}
+
+	orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid order ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.orderService.CancelOrder(userID, orderID)
+	if err != nil {
+		http.Error(w, "Ошибка при отмене заказа", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Заказ успешно отменен"))
 }
