@@ -14,11 +14,11 @@ import (
 
 // OrderHandler отвечает за обработку REST-запросов
 type OrderHandler struct {
-	orderService service.OrderService
+	orderService service.OrderServiceInterface
 }
 
 // NewOrderHandler создаёт новый обработчик
-func NewOrderHandler(orderService service.OrderService) *OrderHandler {
+func NewOrderHandler(orderService service.OrderServiceInterface) *OrderHandler {
 	return &OrderHandler{orderService: orderService}
 }
 

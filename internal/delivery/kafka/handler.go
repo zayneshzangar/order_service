@@ -10,11 +10,11 @@ import (
 )
 
 type Handler struct {
-	orderService service.OrderService
+	orderService   service.OrderServiceInterface
 	productService *grpcclient.ProductServiceClient
 }
 
-func NewHandler(orderService service.OrderService, productService *grpcclient.ProductServiceClient) *Handler {
+func NewHandler(orderService service.OrderServiceInterface, productService *grpcclient.ProductServiceClient) *Handler {
 	return &Handler{orderService: orderService, productService: productService}
 }
 
